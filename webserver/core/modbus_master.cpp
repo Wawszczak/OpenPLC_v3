@@ -72,6 +72,7 @@ struct MB_device
     int rtu_tx_pause;
     uint8_t dev_id;
     bool isConnected;
+    int sharingIndex;
 
     struct MB_address discrete_inputs;
     struct MB_address coils;
@@ -360,38 +361,21 @@ void *querySlaveDevices(void *arg)
         uint16_t bool_output_index = 0;
         uint16_t int_input_index = 0;
         uint16_t int_output_index = 0;
+	int sharingIndex = -1;
 
         for (int i = 0; i < num_devices; i++)
         {
-            //Check if there is a connected RTU device using the same port
-            bool found_sharing = false;
-            bool rtu_port_connected = false;
-            if (mb_devices[i].protocol == MB_RTU)
+            //Must reset mb context to current device's slave id - we are doing this because context can be shared
+            modbus_set_slave(mb_devices[i].mb_ctx, mb_devices[i].dev_id);
+	    // get sharing index - just for simplify rest of syntax
+	    sharingIndex = mb_devices[i].sharingIndex;
+	    //check if device is connected - when we have shared connection, we are looking for status of the 'primary' device at sharingIndex, otherwise sharingIndex point to this device itself
+            if (!mb_devices[sharingIndex].isConnected)
             {
-                for (int a = 0; a < num_devices; a++)
-                {
-                    if (a != i && !strcmp(mb_devices[i].dev_address, mb_devices[a].dev_address))
-                    {
-                        found_sharing = true;
-                        if (mb_devices[a].isConnected)
-                        {
-                            rtu_port_connected = true;
-                        }
-                    }
-                }
-                if (found_sharing)
-                {
-                    //Must reset mb context to current device's slave id
-                    modbus_set_slave(mb_devices[i].mb_ctx, mb_devices[i].dev_id);
-                }
-            }
-
-            //Verify if device is connected
-            if (!mb_devices[i].isConnected && !rtu_port_connected)
-            {
+                //perform reconnect if needed
                 sprintf(log_msg, "Device %s is disconnected. Attempting to reconnect...\n", mb_devices[i].dev_name);
                 log(log_msg);
-                if (modbus_connect(mb_devices[i].mb_ctx) == -1)
+                if (modbus_connect(mb_devices[sharingIndex].mb_ctx) == -1)
                 {
 
                     sprintf(log_msg, "Connection failed on MB device %s: %s\n", mb_devices[i].dev_name, modbus_strerror(errno));
@@ -399,7 +383,7 @@ void *querySlaveDevices(void *arg)
                     
                     if (special_functions[2] != NULL) *special_functions[2]++;
                     
-                    // Because this device is not connected, we skip those input registers
+                    // Because this device is still not connected, we skip those input registers
                     bool_input_index += (mb_devices[i].discrete_inputs.num_regs);
                     int_input_index += (mb_devices[i].input_registers.num_regs);
                     int_input_index += (mb_devices[i].holding_read_registers.num_regs);
@@ -410,12 +394,11 @@ void *querySlaveDevices(void *arg)
                 {
                     sprintf(log_msg, "Connected to MB device %s\n", mb_devices[i].dev_name);
                     log(log_msg);
-                    mb_devices[i].isConnected = true;
+                    mb_devices[sharingIndex].isConnected = true;
                 }
             }
-            if (mb_devices[i].isConnected || rtu_port_connected)
+            if (mb_devices[sharingIndex].isConnected)
             {
-
                 struct timespec ts;
                 ts.tv_sec = 0;
                 if (mb_devices[i].protocol == MB_RTU)
@@ -438,11 +421,9 @@ void *querySlaveDevices(void *arg)
                                                             mb_devices[i].discrete_inputs.num_regs, tempBuff);
                     if (return_val == -1)
                     {
-                        if (mb_devices[i].protocol != MB_RTU)
-                        {
-                            modbus_close(mb_devices[i].mb_ctx);
-                            mb_devices[i].isConnected = false;
-                        }
+			// we shouldn't make difference for handling rtu and tcp - error is error - closing connection is cheap and we can make fresh start for this bus
+                        modbus_close(mb_devices[sharingIndex].mb_ctx);
+                        mb_devices[sharingIndex].isConnected = false;
                         
                         sprintf(log_msg, "Modbus Read Discrete Input Registers failed on MB device %s: %s\n", mb_devices[i].dev_name, modbus_strerror(errno));
                         log(log_msg);
@@ -482,11 +463,8 @@ void *querySlaveDevices(void *arg)
                     int return_val = modbus_write_bits(mb_devices[i].mb_ctx, mb_devices[i].coils.start_address, mb_devices[i].coils.num_regs, tempBuff);
                     if (return_val == -1)
                     {
-                        if (mb_devices[i].protocol != MB_RTU)
-                        {
-                            modbus_close(mb_devices[i].mb_ctx);
-                            mb_devices[i].isConnected = false;
-                        }
+                        modbus_close(mb_devices[sharingIndex].mb_ctx);
+                        mb_devices[sharingIndex].isConnected = false;
 
                         sprintf(log_msg, "Modbus Write Coils failed on MB device %s: %s\n", mb_devices[i].dev_name, modbus_strerror(errno));
                         log(log_msg);
@@ -507,11 +485,8 @@ void *querySlaveDevices(void *arg)
                                                                     mb_devices[i].input_registers.num_regs, tempBuff);
                     if (return_val == -1)
                     {
-                        if (mb_devices[i].protocol != MB_RTU)
-                        {
-                            modbus_close(mb_devices[i].mb_ctx);
-                            mb_devices[i].isConnected = false;
-                        }
+                        modbus_close(mb_devices[sharingIndex].mb_ctx);
+                        mb_devices[sharingIndex].isConnected = false;
                         
                         sprintf(log_msg, "Modbus Read Input Registers failed on MB device %s: %s\n", mb_devices[i].dev_name, modbus_strerror(errno));
                         log(log_msg);
@@ -543,11 +518,9 @@ void *querySlaveDevices(void *arg)
                                                            mb_devices[i].holding_read_registers.num_regs, tempBuff);
                     if (return_val == -1)
                     {
-                        if (mb_devices[i].protocol != MB_RTU)
-                        {
-                            modbus_close(mb_devices[i].mb_ctx);
-                            mb_devices[i].isConnected = false;
-                        }
+                        modbus_close(mb_devices[sharingIndex].mb_ctx);
+                        mb_devices[sharingIndex].isConnected = false;
+
                         sprintf(log_msg, "Modbus Read Holding Registers failed on MB device %s: %s\n", mb_devices[i].dev_name, modbus_strerror(errno));
                         log(log_msg);
                         int_input_index += (mb_devices[i].holding_read_registers.num_regs);
@@ -587,11 +560,8 @@ void *querySlaveDevices(void *arg)
                                                             mb_devices[i].holding_registers.num_regs, tempBuff);
                     if (return_val == -1)
                     {
-                        if (mb_devices[i].protocol != MB_RTU)
-                        {
-                            modbus_close(mb_devices[i].mb_ctx);
-                            mb_devices[i].isConnected = false;
-                        }
+                        modbus_close(mb_devices[sharingIndex].mb_ctx);
+                        mb_devices[sharingIndex].isConnected = false;
                         
                         sprintf(log_msg, "Modbus Write Holding Registers failed on MB device %s: %s\n", mb_devices[i].dev_name, modbus_strerror(errno));
                         log(log_msg);
@@ -616,45 +586,45 @@ void initializeMB()
 
     for (int i = 0; i < num_devices; i++)
     {
-        if (mb_devices[i].protocol == MB_TCP)
+	// we assume that there is no port sharing by default, we have to find it. So we point shareIndex to this device itself
+	mb_devices[i].sharingIndex = i;
+        //Check if there is a device using the same port
+        for (int a = 0; a < i; a++)
         {
-            mb_devices[i].mb_ctx = modbus_new_tcp(mb_devices[i].dev_address, mb_devices[i].ip_port);
-        }
-        else if (mb_devices[i].protocol == MB_RTU)
-        {
-            //Check if there is a device using the same port
-            int share_index = -1;
-            for (int a = 0; a < num_devices && a < i; a++)
+            if (strcmp(mb_devices[i].dev_address, mb_devices[a].dev_address) == 0)
             {
-                if (strcmp(mb_devices[i].dev_address, mb_devices[a].dev_address) == 0)
-                {
-                    share_index = a;
+        	if (((mb_devices[i].protocol == MB_TCP) && (mb_devices[i].ip_port == mb_devices[a].ip_port)) || mb_devices[i].protocol == MB_RTU)
+		{
+		    //we don't have to make difference in handling RTU and TCP - just for TCP those are all 0's
+                    if (mb_devices[i].rtu_baud != mb_devices[share_index].rtu_baud || mb_devices[i].rtu_parity != mb_devices[share_index].rtu_parity || 
+                        mb_devices[i].rtu_data_bit != mb_devices[share_index].rtu_data_bit || mb_devices[i].rtu_stop_bit != mb_devices[share_index].rtu_stop_bit)
+                    {
+                        unsigned char log_msg[1000];
+                        sprintf(log_msg, "Warning MB device %s port setting missmatch\n", mb_devices[i].dev_name);
+                        log(log_msg);
+                    }
+ 
+		    mb_devices[i].sharingIndex = a;
+		    // mb_ctx is not used, so it is explicite set to NULL
+		    mb_devices[i].mb_ctx = NULL;
                     break;
-                }
+		}
             }
-            if (share_index != -1)
+        }
+ 
+	if(mb_devices[i].sharingIndex == i)
+	{
+            if (mb_devices[i].protocol == MB_TCP)
             {
-                if (mb_devices[i].rtu_baud != mb_devices[share_index].rtu_baud || mb_devices[i].rtu_parity != mb_devices[share_index].rtu_parity || 
-                    mb_devices[i].rtu_data_bit != mb_devices[share_index].rtu_data_bit || mb_devices[i].rtu_stop_bit != mb_devices[share_index].rtu_stop_bit)
-                {
-                    unsigned char log_msg[1000];
-                    sprintf(log_msg, "Warning MB device %s port setting missmatch\n", mb_devices[i].dev_name);
-                    log(log_msg);
-                }
-                mb_devices[i].mb_ctx = mb_devices[share_index].mb_ctx;
+                mb_devices[i].mb_ctx = modbus_new_tcp(mb_devices[i].dev_address, mb_devices[i].ip_port);
             }
-            else
+            else if (mb_devices[i].protocol == MB_RTU)
             {
                 mb_devices[i].mb_ctx = modbus_new_rtu(mb_devices[i].dev_address, mb_devices[i].rtu_baud,
                                                 mb_devices[i].rtu_parity, mb_devices[i].rtu_data_bit,
                                                 mb_devices[i].rtu_stop_bit);
             }
         }
-        
-        //slave id
-
-        modbus_set_slave(mb_devices[i].mb_ctx, mb_devices[i].dev_id);
-
 
         //timeout
         uint32_t to_sec = timeout / 1000;
