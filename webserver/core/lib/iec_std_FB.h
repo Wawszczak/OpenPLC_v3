@@ -1886,7 +1886,12 @@ __end:
 
 
 #include "communication.h"
-
+#if defined(__linux__) && defined(__arm__) && defined(SEQUENT)
+    #include "sm_cards.h"
+#endif
+#if defined(__linux__) && defined(__arm__) && defined(SL_RP4)
+    #include "SL-RP4.h"
+#endif
 
 
 

@@ -1013,17 +1013,17 @@ def modbus():
                     if (row[3] == 0):
                         di = "-"
                     else:
-                        di = "%IX" + str(100 + (counter_di/8)) + "." + str(counter_di%8) + " to "
+                        di = "%IX" + str(100 + (counter_di // 8)) + "." + str(counter_di%8) + " to "
                         counter_di += row[3];
-                        di += "%IX" + str(100 + ((counter_di-1)/8)) + "." + str((counter_di-1)%8)
+                        di += "%IX" + str(100 + ((counter_di-1) // 8)) + "." + str((counter_di-1)%8)
                         
                     #calculate do
                     if (row[4] == 0):
                         do = "-"
                     else:
-                        do = "%QX" + str(100 + (counter_do/8)) + "." + str(counter_do%8) + " to "
+                        do = "%QX" + str(100 + (counter_do // 8)) + "." + str(counter_do%8) + " to "
                         counter_do += row[4];
-                        do += "%QX" + str(100 + ((counter_do-1)/8)) + "." + str((counter_do-1)%8)
+                        do += "%QX" + str(100 + ((counter_do-1) // 8)) + "." + str((counter_do-1)%8)
                         
                     #calculate ai
                     if (row[5] + row[6] == 0):
@@ -1722,6 +1722,8 @@ def hardware():
             else: return_str += "<option value='psm_linux'>Python on Linux (PSM)</option>"
             if (current_driver == "psm_win"): return_str += "<option selected='selected' value='psm_win'>Python on Windows (PSM)</option>"
             else: return_str += "<option value='psm_win'>Python on Windows (PSM)</option>"
+            if (current_driver == "sequent"): return_str += "<option selected='selected' value='sequent'>Sequent HAT</option>"
+            else: return_str += "<option value='sequent'>Sequent HAT's</option>"
             return_str += """
                         </select>
                         <br>
@@ -2371,9 +2373,6 @@ if __name__ == '__main__':
     file = open("active_program", "r")
     st_file = file.read()
     st_file = st_file.replace('\r','').replace('\n','')
-    
-    reload(sys)
-    sys.setdefaultencoding('UTF8')
     
     database = "openplc.db"
     conn = create_connection(database)
