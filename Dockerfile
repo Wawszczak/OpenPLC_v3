@@ -1,9 +1,14 @@
-FROM debian:bullseye-20211201
-COPY . /workdir
+FROM debian:bullseye-20231120
+COPY ./*.sh /workdir/
 WORKDIR /workdir
 RUN mkdir /persistent
 VOLUME /persistent
-RUN ./install.sh docker
+RUN ./install.sh docker InstallDeps
+RUN ./install.sh docker InstallPyDeps
+COPY ./utils /workdir/utils/
+RUN ./install.sh docker InstallAllLibs
+COPY ./webserver /workdir/webserver/
+RUN ./install.sh docker Finalize
 RUN touch /persistent/mbconfig.cfg
 RUN touch /persistent/persistent.file
 RUN mkdir /persistent/st_files

@@ -95,6 +95,9 @@ function install_matiec {
     autoreconf -i
     ./configure
     make
+    if ! [ -d  $OPENPLC_DIR/webserver/ ]; then
+	    mkdir $OPENPLC_DIR/webserver
+    fi
     cp ./iec2c "$OPENPLC_DIR/webserver/" || fail "Error compiling MatIEC"
     cd "$OPENPLC_DIR"
 }
@@ -108,15 +111,40 @@ function install_st_optimizer {
 
 function install_glue_generator {
     echo "[GLUE GENERATOR]"
+    if ! [ -d $OPENPLC_DIR/webserver/core ] ; then
+	    mkdir ../../webserver/core
+    fi
     cd "$OPENPLC_DIR/utils/glue_generator_src"
     g++ -std=c++11 glue_generator.cpp -o "$OPENPLC_DIR/webserver/core/glue_generator" || fail "Error compiling Glue Generator"
+#    cp ./glue_generator ../../webserver/core
+#    if [ $? -ne 0 ]; then
+#        echo "Error compiling Glue Generator"
+#        echo "OpenPLC was NOT installed!"
+#        exit 1
+#    fi
     cd "$OPENPLC_DIR"
-}
+#    if [ "$ETHERCAT_INSTALL" == "install" ]; then
+#        echo ""
+#        echo "[EtherCAT]"
+#        cd utils/ethercat_src
+#        ./install.sh
+#        if [ $? -ne 0 ]; then
+#            echo "Error compiling EtherCAT"
+#            echo "OpenPLC was NOT installed!"
+#            exit 1
+#        fi
+#        cd ../..
+#    fi
 
+
+}
 function install_ethercat {
     echo "[EtherCAT]"
     cd "$OPENPLC_DIR/utils/ethercat_src"
     ./install.sh || fail "Error compiling EtherCAT"
+    if ! [ -d $OPENPLC_DIR/webserver/scripts ] ; then
+	    mkdir ../../webserver/scripts
+    fi
     echo ethercat > "$OPENPLC_DIR/webserver/scripts/ethercat"
     cd "$OPENPLC_DIR"
 }
@@ -267,10 +295,36 @@ elif [ "$1" == "linux" ]; then
 
 elif [ "$1" == "docker" ]; then
     echo "Installing OpenPLC on Linux inside Docker"
-    linux_install_deps
-    install_py_deps
-    install_all_libs
-    finalize_install linux
+    if [ $# -eq 1 ]; then
+	    echo ""
+	    echo "Error: There is no docker install stage specified."
+	    echo "Possible options for second argument:"
+	    echo "         InstallDeps"
+	    echo "         InstallPyDeps"
+	    echo "         InstallAllLibs"
+	    echo "         Finalize"
+	    echo ""
+	    exit 1
+    fi
+    if [ "$2" = "InstallDeps" ]; then    
+	linux_install_deps
+    elif [ "$2" = "InstallPyDeps" ]; then
+    	install_py_deps
+    elif [ "$2" = "InstallAllLibs" ]; then
+	install_all_libs
+    elif [ "$2" = "Finalize" ]; then
+    	finalize_install linux
+    else
+	echo ""
+	echo "Error: Unrecognized Docker subcommand"
+        echo "Possible options for second argument:"
+        echo "         InstallDeps"
+        echo "         InstallPyDeps"
+        echo "         InstallAllLibs"
+        echo "         Finalize"
+        echo ""
+        exit 1
+    fi
 
 elif [ "$1" == "rpi" ]; then
     echo "Installing OpenPLC on Raspberry Pi"
